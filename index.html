@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>nicomaki</title>
+  <meta name="description" content="nicomaki live stream and chat">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0e0e10;
+      --panel: #18181b;
+      --border: #2a2a2e;
+      --text: #efeff1;
+      --muted: #adadb8;
+      --accent: #9147ff;
+      --live: #eb0400;
+      --nav-h: 52px;
+      --chat-w: 360px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    /* ---------- Top bar ---------- */
+    .nav {
+      height: var(--nav-h);
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      padding: 0 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.5px;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 18px; }
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+    .btn {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font: 600 13px Inter, system-ui, sans-serif;
+      cursor: pointer;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); }
+
+    /* ---------- Layout ---------- */
+    .layout {
+      height: calc(100% - var(--nav-h));
+      display: flex;
+    }
+    .stream {
+      flex: 1;
+      min-width: 0;
+      background: #000;
+      display: flex;
+    }
+    .stream iframe { flex: 1; width: 100%; height: 100%; border: 0; }
+
+    .resizer {
+      width: 6px;
+      cursor: col-resize;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .resizer:hover, .resizer.dragging { background: var(--accent); }
+
+    .chat {
+      width: var(--chat-w);
+      flex-shrink: 0;
+      background: var(--panel);
+      display: flex;
+    }
+    .chat iframe { flex: 1; width: 100%; height: 100%; border: 0; }
+
+    body.chat-hidden .chat,
+    body.chat-hidden .resizer { display: none; }
+
+    /* ---------- Phone: stack the player above the chat ---------- */
+    @media (max-width: 800px) {
+      .nav-links { display: none; }
+      .layout { flex-direction: column; }
+      .stream { flex: none; aspect-ratio: 16 / 9; }
+      .resizer { display: none; }
+      .chat { width: 100%; flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a class="logo" href="/">nico<span>maki</span></a>
+    <div class="nav-links">
+      <a id="twitch-link" href="#" target="_blank" rel="noopener">Twitch</a>
+      <a href="#" target="_blank" rel="noopener">YouTube</a>
+      <a href="#" target="_blank" rel="noopener">Discord</a>
+    </div>
+    <div class="nav-right">
+      <button class="btn" id="toggle-chat" type="button">Hide chat</button>
+      <a class="btn primary" id="follow-btn" href="#" target="_blank" rel="noopener" style="text-decoration:none">Follow</a>
+    </div>
+  </nav>
+
+  <main class="layout">
+    <section class="stream" id="stream"></section>
+    <div class="resizer" id="resizer" title="Drag to resize chat"></div>
+    <aside class="chat" id="chat"></aside>
+  </main>
+
+  <script>
+    // ===== Change this to your Twitch username =====
+    const TWITCH_CHANNEL = "nico2maki";
+
+    // Twitch only lets its player and chat load on domains listed as "parent".
+    const parents = ["nicomaki.stream", "www.nicomaki.stream", location.hostname]
+      .filter((h, i, all) => h && all.indexOf(h) === i)
+      .map(h => "parent=" + encodeURIComponent(h))
+      .join("&");
+
+    const channel = encodeURIComponent(TWITCH_CHANNEL);
+
+    document.getElementById("stream").innerHTML =
+      `<iframe src="https://player.twitch.tv/?channel=${channel}&${parents}&autoplay=true&muted=false"
+               allowfullscreen allow="autoplay; fullscreen"></iframe>`;
+
+    document.getElementById("chat").innerHTML =
+      `<iframe src="https://www.twitch.tv/embed/${channel}/chat?${parents}&darkpopout"></iframe>`;
+
+    document.getElementById("twitch-link").href = `https://twitch.tv/${channel}`;
+    document.getElementById("follow-btn").href = `https://twitch.tv/${channel}`;
+
+    // ----- Show / hide chat -----
+    const toggleBtn = document.getElementById("toggle-chat");
+    function setChatHidden(hidden) {
+      document.body.classList.toggle("chat-hidden", hidden);
+      toggleBtn.textContent = hidden ? "Show chat" : "Hide chat";
+      try { localStorage.setItem("chatHidden", hidden ? "1" : "0"); } catch (e) {}
+    }
+    toggleBtn.addEventListener("click", () =>
+      setChatHidden(!document.body.classList.contains("chat-hidden")));
+
+    // ----- Drag to resize chat -----
+    const resizer = document.getElementById("resizer");
+    const root = document.documentElement;
+    function setChatWidth(px) {
+      const w = Math.max(280, Math.min(px, window.innerWidth * 0.6));
+      root.style.setProperty("--chat-w", w + "px");
+      return w;
+    }
+    resizer.addEventListener("pointerdown", e => {
+      resizer.classList.add("dragging");
+      resizer.setPointerCapture(e.pointerId);
+      // iframes swallow pointer events while dragging, so switch them off.
+      document.querySelectorAll("iframe").forEach(f => f.style.pointerEvents = "none");
+    });
+    resizer.addEventListener("pointermove", e => {
+      if (!resizer.classList.contains("dragging")) return;
+      setChatWidth(window.innerWidth - e.clientX);
+    });
+    resizer.addEventListener("pointerup", e => {
+      resizer.classList.remove("dragging");
+      document.querySelectorAll("iframe").forEach(f => f.style.pointerEvents = "");
+      const w = parseInt(getComputedStyle(root).getPropertyValue("--chat-w"), 10);
+      try { localStorage.setItem("chatWidth", String(w)); } catch (e) {}
+    });
+
+    // ----- Restore saved preferences -----
+    try {
+      const savedW = parseInt(localStorage.getItem("chatWidth"), 10);
+      if (savedW) setChatWidth(savedW);
+      if (localStorage.getItem("chatHidden") === "1") setChatHidden(true);
+    } catch (e) {}
+  </script>
+</body>
+</html>
